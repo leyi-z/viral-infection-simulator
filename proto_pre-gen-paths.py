@@ -22,8 +22,6 @@ import random as rd
 
 # %%
 device = t.device("cuda")
-
-# %%
 num_virus = 10**4
 num_steps = 60*60*24*3 # 60*60*24*3=259200 seconds in 3 days
 infection_prob = 0.2
@@ -34,7 +32,7 @@ infection_prob = 0.2
 # z the other one
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Starting attempt, trashed
+# ### Starting attempt, trashed <a name="starting-attempt"></a>
 
 # %%
 # vir_sim = t.zeros(num_virus,3)
@@ -53,7 +51,7 @@ infection_prob = 0.2
 # print(time.time() - start_time, "s")
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Second attempt, very inefficient
+# ### Second attempt, very inefficient <a name="second-attempt"></a>
 #
 # Looks elegant but way too slow, need to find way to improve (or give up?)
 
@@ -91,7 +89,7 @@ for step in range(num_steps):
 print(time.time() - start_time, "s")
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Vastly improved efficiency
+# ### Vastly improved efficiency <a name="improved-efficiency"></a>
 #
 # Record time spent on each line of code. Find ways to shorten it. (For reference: the original code takes less that a second to complete this step.)
 
@@ -113,7 +111,7 @@ t_total_inner = []
 start_time = time.time()
 vir_sim = t.zeros(num_virus,3,device=device) # starting all virions at (0,0,0)
 # infect_mask = t.zeros(num_virus, dtype=t.bool,device=device) # initialize, array of false
-active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of false
+active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
 dice_roll = t.empty_like(active_mask, dtype=t.float) # initialize, empty
 vir_sim_every_min = []
 vir_sim_every_min.append(np.copy(vir_sim.cpu())) # record starting position of virions
@@ -189,11 +187,11 @@ print("t_infect_loop:",np.sum(t_infect_loop))
 print("t_total_inner:",np.sum(t_total_inner))
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Efficient version, cleaned up
+# ### Efficient version, cleaned up <a name="cleaned-up"></a>
 
 # %%
 vir_sim = t.zeros(num_virus,3,device=device) # starting all virions at (0,0,0)
-active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of false
+active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
 dice_roll = t.empty_like(active_mask, dtype=t.float) # initialize, empty
 vir_sim_every_min = []
 vir_sim_every_min.append(np.copy(vir_sim.cpu())) # record starting position of virions
@@ -220,13 +218,13 @@ for step in range(num_steps):
 print(time.time() - start_time)
 
 # %% [markdown] jp-MarkdownHeadingCollapsed=true
-# ### Active virion count over time?
+# ### Active virion count over time? <a name="active-virion-count"></a>
 #
 # Number of active virions becomes **very** low (~200 out of 10000) after just an hour, but the code still carries around the entire tensor. It's quite a waste compared to computing each virion individually... Maybe it will get better once more eliminating mechanisms are added, hopefully.
 
 # %%
 vir_sim = t.zeros(num_virus,3,device=device) # starting all virions at (0,0,0)
-active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of false
+active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
 dice_roll = t.empty_like(active_mask, dtype=t.float) # initialize, empty
 vir_sim_every_min = []
 vir_sim_every_min.append(np.copy(vir_sim.cpu())) # record starting position of virions
@@ -266,8 +264,8 @@ plt.xlabel("time (minute)")
 plt.ylabel("free virions")
 plt.show()
 
-# %% [markdown]
-# ### Reflective upper boundary!
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# ### Reflective upper boundary! <a name="upper-boundary"></a>
 #
 # Now virions can't float away from cells infinitely. Will probably vastly improve speed.
 
@@ -276,7 +274,7 @@ reflective_boundary = 17 # microns
 
 # %%
 vir_sim = t.zeros(num_virus,3,device=device) # starting all virions at (0,0,0)
-active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of false
+active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
 dice_roll = t.empty_like(active_mask, dtype=t.float) # initialize, empty
 vir_sim_every_min = [] # to record position of virions
 
@@ -312,13 +310,156 @@ for step in range(num_steps):
 print("total time:", time.time() - start_time)
 
 # %%
+t.max(t.abs(vir_sim))
+
+# %% [markdown] jp-MarkdownHeadingCollapsed=true
+# ### Record and update infected cells
+#
+# ...and initial infection times
 
 # %%
+device = t.device("cuda")
+
+reflective_boundary = 17 # microns
+cell_diameter = 4
+
+infection_prob = 0.2
+virion_prod_rate = 42 # per hour i.e. ~1000 per day
+end_time = 72 # hours
+
+num_virus = (end_time - 0) * virion_prod_rate
+num_steps = end_time * 60 * 60
+
+print(num_virus, num_steps)
+
+# %%
+vir_sim = t.zeros(num_virus,3,device=device) # starting all virions at (0,0,0)
+active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
+dice_roll = t.empty_like(active_mask, dtype=t.float) # initialize, empty
+#infection_times = t.zeros(num_virus, device=device) - 1 # record step at which a cell is infected
+vir_sim_every_min = [] # to record position of virions
+infected_cells = {}
+
+start_time = time.time()
+for step in range(num_steps):  
+    
+    vir_sim += (t.rand(num_virus,3,device=device)*2-1) * active_mask.reshape(-1,1) # simulates next step
+
+    ################
+    # reflective upper boundary 
+    # TODO: more efficient?
+    ################
+    reflect_mask = t.zeros(num_virus, dtype=t.bool,device=device)
+    reflect_mask = (vir_sim[:,0]>reflective_boundary) * active_mask
+    vir_sim[reflect_mask,0] = reflective_boundary*2 - vir_sim[reflect_mask,0]
+    ################
+
+    encounter_mask = t.zeros(num_virus, dtype=t.bool,device=device) # initialize encounter_mask as array of false
+    encounter_mask = (vir_sim[:,0]<0) * active_mask # mask of virions that encountered a cell (true if encountner)
+
+    num_encounter = encounter_mask.sum() # number of virions that encountered a cell
+    
+    if num_encounter>0:
+        dice_roll[encounter_mask] = t.rand(size=(num_encounter,),device=device) # for each encounter, roll random number from 0 to 1
+        # active_mask ^= encounter_mask & (dice_roll < infection_prob) # flip true to false if condition holds
+        new_infection = encounter_mask & (dice_roll < infection_prob)
+        active_mask ^= new_infection # remove infected cells from active mask
+        #infection_times[new_infection] = step + 1
+
+        ############
+        # module for updating infected cells list
+        # TODO: more efficient?
+        ############
+        new_cell_loc = (t.unique(vir_sim[new_infection,1:] // cell_diameter, dim=0)).int().tolist()
+        new_cell_loc = set([str(loc) for loc in new_cell_loc]) - infected_cells.keys()
+        infected_cells |= {loc: step+1 for loc in new_cell_loc}
+        ############
+
+    # if step%60==0: # save the location of virions every minute
+    #     vir_sim_every_min.append(np.copy(vir_sim.cpu()))
+    
+    if active_mask.sum()==0: # number of active virions being simulated at this step
+        print("no active virions remain after step:", step)
+        break
+
+print("total time:", time.time() - start_time)
+
 
 # %% [markdown]
-# ### 
+# ### Turn it into a function <a name="function"></a>
 
-# %% [markdown]
-# ### ???
+# %%
+def sim_vir_path(device, num_virus, num_steps, infection_prob, reflective_boundary, cell_diameter):
+    
+    vir_sim = t.zeros(num_virus,3,device=device) # starting all virions at (0,0,0)
+    active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
+    dice_roll = t.empty_like(active_mask, dtype=t.float) # initialize, empty
+    vir_sim_every_min = [] # to record position of virions
+    infected_cells = {}
+    
+    start_time = time.time()
+    for step in range(num_steps):  
+        
+        vir_sim += (t.rand(num_virus,3,device=device)*2-1) * active_mask.reshape(-1,1) # simulates next step
+    
+        ################
+        # reflective upper boundary 
+        # TODO: more efficient?
+        ################
+        reflect_mask = t.zeros(num_virus, dtype=t.bool,device=device)
+        reflect_mask = (vir_sim[:,0]>reflective_boundary) * active_mask
+        vir_sim[reflect_mask,0] = reflective_boundary*2 - vir_sim[reflect_mask,0]
+        ################
+    
+        encounter_mask = t.zeros(num_virus, dtype=t.bool,device=device) # initialize encounter_mask as array of false
+        encounter_mask = (vir_sim[:,0]<0) * active_mask # mask of virions that encountered a cell (true if encountner)
+    
+        num_encounter = encounter_mask.sum() # number of virions that encountered a cell
+        
+        if num_encounter>0:
+            dice_roll[encounter_mask] = t.rand(size=(num_encounter,),device=device) # for each encounter, roll random number from 0 to 1
+            new_infection = encounter_mask & (dice_roll < infection_prob)
+            active_mask ^= new_infection # remove infected cells from active mask
+    
+            ############
+            # module for updating infected cells list
+            # TODO: more efficient?
+            ############
+            new_cell_loc = (t.unique(vir_sim[new_infection,1:] // cell_diameter, dim=0)).int().tolist()
+            new_cell_loc = set([str(loc) for loc in new_cell_loc]) - infected_cells.keys()
+            infected_cells |= {loc: step+1 for loc in new_cell_loc}
+            ############
+    
+        # if step%60==0: # save the location of virions every minute
+        #     vir_sim_every_min.append(np.copy(vir_sim.cpu()))
+        
+        if active_mask.sum()==0: # number of active virions being simulated at this step
+            print("no active virions remain after step:", step)
+            break
+    
+    print("total time:", time.time() - start_time)
+
+    return infected_cells
+
+
+# %%
+device = t.device("cuda")
+num_virus = 10**4
+num_steps = 60*60*24*3 # 60*60*24*3=259200 seconds in 3 days
+infection_prob = 0.2
+reflective_boundary = 17 # microns
+cell_diameter = 4
+
+virion_prod_rate = 42 # per hour i.e. ~1000 per day
+end_time = 72 # hours
+
+num_virus = (end_time - 0) * virion_prod_rate
+num_steps = end_time * 60 * 60
+
+print(num_virus, num_steps)
+
+infected_cells = sim_vir_path(device, num_virus, num_steps, infection_prob, reflective_boundary, cell_diameter)
+
+print(len(infected_cells), "cells got infected")
 
 # %%

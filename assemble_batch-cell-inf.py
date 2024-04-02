@@ -24,7 +24,8 @@ import itertools
 
 
 # %%
-def sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_boundary, cell_diameter, infectable_sim_block):
+def sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_boundary, advection_boundary, advection_velocity, exit_boundary, 
+                       periodic_boundary, cell_diameter, infectable_block_size, infectable_sim_block):
     
     vir_sim = t.zeros(num_virus, 4, device=device) # starting all virions at (0,0,0), 4th column records infection time
     active_mask = t.ones(num_virus, dtype=t.bool,device=device) # initialize, array of true
@@ -36,7 +37,7 @@ def sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_
     start_time = time.time()
     for step in range(num_steps):  
     
-        vir_sim[:,:3] += (t.rand(num_virus,3,device=device)*2-1) * active_mask.reshape(-1,1) # simulates next step
+        vir_sim[:,:3] += (t.rand(num_virus,3,device=device)*2-1) * 1.27 * active_mask.reshape(-1,1) # simulates next step
     
         ################
         # reflective upper boundary 
@@ -61,6 +62,12 @@ def sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_
         flux_mask = t.zeros(num_virus, dtype=t.bool,device=device)
         flux_mask = (vir_sim[:,1]>exit_boundary) * active_mask
         active_mask ^= flux_mask
+        ################
+
+        ################
+        # periodic boundary condition
+        ################
+        vir_sim[:,2] = vir_sim[:,2] % periodic_boundary
         ################
     
         encounter_mask = t.zeros(num_virus, dtype=t.bool,device=device) # initialize encounter_mask as array of false
@@ -108,7 +115,8 @@ def sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_
 # %%
 # includes starting location of each virion
 def sim_vir_path_later_waves(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, cell_diameter, num_steps, 
-                             reflective_boundary, infectable_sim_block, infection_prob):
+                             reflective_boundary, advection_boundary, advection_velocity, exit_boundary, periodic_boundary,
+                             infectable_block_size, infectable_sim_block, infection_prob):
     
     # vir_sim = t.zeros(num_virus,4,device=device) # starting all virions at (0,0,0), 4th column records infection time  
     # initialize virion path with starting locations
@@ -129,7 +137,7 @@ def sim_vir_path_later_waves(num_virus, device, vir_prod_each_cell, infected_cel
     start_time = time.time()
     for step in range(num_steps):  
     
-        vir_sim[:,:3] += (t.rand(num_virus,3,device=device)*2-1) * active_mask.reshape(-1,1) # simulates next step
+        vir_sim[:,:3] += (t.rand(num_virus,3,device=device)*2-1) * 1.27 * active_mask.reshape(-1,1) # simulates next step
     
         ################
         # reflective upper boundary 
@@ -155,6 +163,12 @@ def sim_vir_path_later_waves(num_virus, device, vir_prod_each_cell, infected_cel
         flux_mask = t.zeros(num_virus, dtype=t.bool,device=device)
         flux_mask = (vir_sim[:,1]>exit_boundary) * active_mask
         active_mask ^= flux_mask
+        ################
+
+        ################
+        # periodic boundary condition
+        ################
+        vir_sim[:,2] = vir_sim[:,2] % periodic_boundary
         ################
     
         encounter_mask = t.zeros(num_virus, dtype=t.bool,device=device) # initialize encounter_mask as array of false
@@ -246,15 +260,16 @@ def inf_cell_wave0(vir_prod_interval, num_virus, device, infected_cells_wave0, c
         df[i] = df[i].astype(int)
     
     # eliminate repeated infections by selecting the minimum infection time
+    df = df[df[2] != 0]
     infected_cells_wave0_adjusted_df = df.groupby([0,1], as_index=False).agg('min')
     print("number of unique infected cells in wave 0:", len(infected_cells_wave0_adjusted_df))
     
     # # remove previously infected cells, only keep new ones
-    infected_cells_wave0_adjusted_coordinate_series = pd.Series(zip(infected_cells_wave0_adjusted_df[0],infected_cells_wave0_adjusted_df[1]))
-    all_infected_cells_coordinate_series = pd.Series(zip(all_infected_cells[0],all_infected_cells[1]))
-    shared_cells = infected_cells_wave0_adjusted_coordinate_series.isin(all_infected_cells_coordinate_series)
-    infected_cells_wave0_adjusted_df = infected_cells_wave0_adjusted_df[~shared_cells]
-    print("number of new infected cells among those:", len(infected_cells_wave0_adjusted_df))
+    # infected_cells_wave0_adjusted_coordinate_series = pd.Series(zip(infected_cells_wave0_adjusted_df[0],infected_cells_wave0_adjusted_df[1]))
+    # all_infected_cells_coordinate_series = pd.Series(zip(all_infected_cells[0],all_infected_cells[1]))
+    # shared_cells = infected_cells_wave0_adjusted_coordinate_series.isin(all_infected_cells_coordinate_series)
+    # infected_cells_wave0_adjusted_df = infected_cells_wave0_adjusted_df[~shared_cells]
+    # print("number of new infected cells among those:", len(infected_cells_wave0_adjusted_df))
     
     # add new infected cells to all infected cells table
     all_infected_cells_after_wave0 = pd.concat([all_infected_cells, infected_cells_wave0_adjusted_df])
@@ -284,6 +299,7 @@ def inf_cell_later_waves(infected_cells_new, cell_diameter, vir_prod_modifier, a
         df[i] = df[i].astype(int)
     
     # eliminate repeated infections by selecting the minimum infection time
+    df = df[df[2] != 0]
     infected_cells_new_adjusted_df = df.groupby([0,1], as_index=False).agg('min')
     print("unique infected cells:", len(infected_cells_new_adjusted_df))
     
@@ -317,6 +333,7 @@ reflective_boundary = 17 # microns
 exit_boundary = 130000 # microns
 advection_boundary = 7 # microns
 advection_velocity = 146.67 # microns
+periodic_boundary = 50000 # microns
 cell_diameter = 4
 
 virion_prod_rate = 42 # 42 per hour i.e. ~1000 per day
@@ -324,7 +341,7 @@ end_time = 72 # 72 hours
 
 latency_time = 6 # hours
 
-infectable_block_size = 1000
+infectable_block_size = 2**10
 infectable_sim_block = t.rand(infectable_block_size*infectable_block_size, device=device) < infectable_fraction
 
 # %%
@@ -338,7 +355,8 @@ num_virus = (num_steps // vir_prod_interval) + 1
 print(num_virus, num_steps)
 
 # simulate wave 0
-infected_cells_wave0 = sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_boundary, cell_diameter, infectable_sim_block)
+infected_cells_wave0 = sim_vir_path_wave0(device, num_virus, num_steps, infection_prob, reflective_boundary, advection_boundary, advection_velocity, exit_boundary, 
+                                         periodic_boundary, cell_diameter, infectable_block_size, infectable_sim_block)
 
 infected_cells_wave0_adjusted_np, all_infected_cells_after_wave0 = inf_cell_wave0(vir_prod_interval, num_virus, device, infected_cells_wave0, cell_diameter)
 
@@ -371,8 +389,9 @@ for wave in range(1,num_waves+1):
             print("batch:", batch+1)
             cell_cutoff_new = list((x > (batch * memory_cutoff)) for x in vir_prod_subtotal).index(True)
             infected_cells_new = sim_vir_path_later_waves(memory_cutoff, device, vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new], 
-                                                                           infected_cells_old_adjusted_np, cell_diameter, num_steps,
-                                                                           reflective_boundary, infectable_sim_block, infection_prob)
+                                                          infected_cells_old_adjusted_np, cell_diameter, num_steps,
+                                                          reflective_boundary, advection_boundary, advection_velocity, exit_boundary, periodic_boundary,
+                                                          infectable_block_size, infectable_sim_block, infection_prob)
             infected_cells_new_adjusted_np_batch, all_infected_cells = inf_cell_later_waves(infected_cells_new, cell_diameter, 
                                                                                             vir_prod_modifier[batch*memory_cutoff:(batch+1)*memory_cutoff], 
                                                                                             all_infected_cells) 
@@ -383,8 +402,9 @@ for wave in range(1,num_waves+1):
         batch += 1
         print("last batch:", batch+1)
         infected_cells_new = sim_vir_path_later_waves(int(num_virus % memory_cutoff), device, vir_prod_each_cell[cell_cutoff_old:], 
-                                                                       infected_cells_old_adjusted_np, cell_diameter, num_steps,
-                                                                       reflective_boundary, infectable_sim_block, infection_prob)
+                                                      infected_cells_old_adjusted_np, cell_diameter, num_steps,
+                                                      reflective_boundary, advection_boundary, advection_velocity, exit_boundary, periodic_boundary,
+                                                      infectable_block_size, infectable_sim_block, infection_prob)
         infected_cells_new_adjusted_np_batch, all_infected_cells = inf_cell_later_waves(infected_cells_new, cell_diameter, 
                                                                                         vir_prod_modifier[batch*memory_cutoff:], 
                                                                                         all_infected_cells) 
@@ -394,7 +414,8 @@ for wave in range(1,num_waves+1):
             
     else:
         infected_cells_new = sim_vir_path_later_waves(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, cell_diameter, num_steps, 
-                                 reflective_boundary, infectable_sim_block, infection_prob)
+                                                      reflective_boundary, advection_boundary, advection_velocity, exit_boundary, periodic_boundary,
+                                                      infectable_block_size, infectable_sim_block, infection_prob)
         infected_cells_new_adjusted_np, all_infected_cells = inf_cell_later_waves(infected_cells_new, cell_diameter, vir_prod_modifier, all_infected_cells)
         print("\n")
 
@@ -405,14 +426,8 @@ print("total infected cells:", len(all_infected_cells))
 print("total virions simulated:", num_virus_total)
 
 # %%
-
-# %%
 all_infected_cells.to_csv("infected_cells.csv", index=False) 
-
-# %%
 (pd.DataFrame(infected_cells_new.cpu())).to_csv("infected_cells_last_wave.csv", index=False) 
-
-# %%
-(pd.DataFrame(infected_cells_new_adjusted_np)).to_csv("infected_cells_last_wave_raw.csv", index=False) 
+(pd.DataFrame(infected_cells_new_adjusted_np)).to_csv("infected_cells_last_wave_raw.csv", index=False)
 
 # %%

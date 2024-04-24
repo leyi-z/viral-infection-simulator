@@ -38,7 +38,7 @@ advection_velocity = 146.67  # 146.67 microns per second in nasal passage
 periodic_boundary = 50000 # microns
 cell_diameter = 4
 
-virion_prod_rate = 42 # 42 per hour i.e. ~1000 per day
+virion_prod_rate = 8 # 42 per hour i.e. ~1000 per day
 end_time = 48 # 72 hours
 
 latency_time = 6 # hours
@@ -54,26 +54,29 @@ adv_vel_cell = advection_velocity / cell_diameter
 prd_bound_cell = periodic_boundary / cell_diameter
 diffusion_cell = diffusion_coeff / cell_diameter
 
-# %%
-num_steps = end_time * 60 * 60
-viral_load_over_time = np.zeros(num_steps//record_increment)
-
 # want each virion to be produced at an integer step
 # this gives a close enough exact number of virions produced
 vir_prod_interval = (60 * 60 // virion_prod_rate) + 1 # seconds per virion
-num_virus = (num_steps // vir_prod_interval) + 1
+# start with 1 infected cell at (0,0)
+infected_cells_start_np = np.array([[0,0,0]])
+all_infected_cells = pd.DataFrame({0: [0], 1: [0], 2:[0]}) # start with 1 infected cell at (0,0)
 
-print(num_virus, num_steps)
+viral_load_over_time = np.zeros(end_time * 60 * 60//record_increment)
+
+# %%
+# generate secondary parameters
+num_steps, num_virus, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(end_time, latency_time, 
+                                                                                         vir_prod_interval, infected_cells_start_np, device)
+print(num_virus, num_steps, vir_prod_each_cell)
 
 # simulate wave 0
-infected_cells_wave0 = sim_vir_path_wave0(device, num_virus, num_steps, diffusion_cell, infection_prob, ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, 
-                                         prd_bound_cell, infectable_block_size, infectable_sim_block)
-
-vir_prod_modifier = t.tensor([x * vir_prod_interval for x in range(num_virus)], device=device)
+infected_cells_wave0 = simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_start_np, num_steps, diffusion_cell,
+                                          ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
+                                          infectable_block_size, infectable_sim_block, infection_prob)
 
 viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cells_wave0, viral_load_over_time)
 
-infected_cells_wave0_adjusted_np, all_infected_cells_after_wave0 = inf_cell_wave0(vir_prod_modifier, num_virus, device, num_steps, infected_cells_wave0)
+infected_cells_wave0_adjusted_np, all_infected_cells_after_wave0 = infected_cells_location_and_time(infected_cells_wave0, vir_prod_modifier, end_time, all_infected_cells)
 
 plt.plot(viral_load_over_time)
 x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
@@ -98,7 +101,7 @@ for wave in range(1,num_waves+1):
     
     start_time_wave = time.time()
     start_time = time.time()
-    num_steps, num_virus, vir_prod_each_cell, vir_prod_modifier = secondary_para_later_waves(end_time, latency_time, 
+    num_steps, num_virus, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(end_time, latency_time, 
                                                                                              vir_prod_interval, infected_cells_old_adjusted_np, device)
     print("actual time to run function to generate num_virus:", time.time()-start_time, "seconds")
     
@@ -122,7 +125,7 @@ for wave in range(1,num_waves+1):
             
             start_time = time.time()
             print("cell cutoff:", cell_cutoff_new)
-            infected_cells_new = sim_vir_path_later_waves(memory_cutoff, device, vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new+1], 
+            infected_cells_new = simulate_virion_paths(memory_cutoff, device, vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new+1], 
                                                           infected_cells_old_adjusted_np[cell_cutoff_old:cell_cutoff_new+1], num_steps, diffusion_cell,
                                                           ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
                                                           infectable_block_size, infectable_sim_block, infection_prob)
@@ -132,7 +135,7 @@ for wave in range(1,num_waves+1):
                                                               infected_cells_new, viral_load_over_time)
             print("actual time to run function to count viral load:", time.time()-start_time, "seconds")
             start_time = time.time()
-            infected_cells_new_adjusted_np_batch, all_infected_cells = inf_cell_later_waves(infected_cells_new,
+            infected_cells_new_adjusted_np_batch, all_infected_cells = infected_cells_location_and_time(infected_cells_new,
                                                                                             vir_prod_modifier[batch*memory_cutoff:(batch+1)*memory_cutoff], 
                                                                                             end_time, all_infected_cells) 
             print("actual time to run function to postprocess:", time.time()-start_time, "seconds")
@@ -146,7 +149,7 @@ for wave in range(1,num_waves+1):
         print("last batch:", batch+1)
         start_time_batch = time.time()
         start_time = time.time()
-        infected_cells_new = sim_vir_path_later_waves(int(num_virus % memory_cutoff), device, vir_prod_each_cell[cell_cutoff_old:], 
+        infected_cells_new = simulate_virion_paths(int(num_virus % memory_cutoff), device, vir_prod_each_cell[cell_cutoff_old:], 
                                                       infected_cells_old_adjusted_np, num_steps, diffusion_cell,
                                                       ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
                                                       infectable_block_size, infectable_sim_block, infection_prob)
@@ -156,7 +159,7 @@ for wave in range(1,num_waves+1):
                                                           infected_cells_new, viral_load_over_time)
         print("actual time to run function to count viral load:", time.time()-start_time, "seconds")
         start_time = time.time()
-        infected_cells_new_adjusted_np_batch, all_infected_cells = inf_cell_later_waves(infected_cells_new, vir_prod_modifier[batch*memory_cutoff:], 
+        infected_cells_new_adjusted_np_batch, all_infected_cells = infected_cells_location_and_time(infected_cells_new, vir_prod_modifier[batch*memory_cutoff:], 
                                                                                         end_time, all_infected_cells) 
         print("actual time to run function to postprocess:", time.time()-start_time, "seconds")
         infected_cells_new_adjusted_np = np.concatenate((infected_cells_new_adjusted_np, infected_cells_new_adjusted_np_batch), axis=0)
@@ -168,7 +171,7 @@ for wave in range(1,num_waves+1):
     else:
         start_time_batch = time.time()
         start_time = time.time()
-        infected_cells_new = sim_vir_path_later_waves(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell,
+        infected_cells_new = simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell,
                                                       ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
                                                       infectable_block_size, infectable_sim_block, infection_prob)
         print("actual time to run function to simulate:", time.time()-start_time, "seconds")
@@ -176,7 +179,7 @@ for wave in range(1,num_waves+1):
         viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cells_new, viral_load_over_time)
         print("actual time to run function to count viral load:", time.time()-start_time, "seconds")
         start_time = time.time()
-        infected_cells_new_adjusted_np, all_infected_cells = inf_cell_later_waves(infected_cells_new, vir_prod_modifier, end_time, all_infected_cells)
+        infected_cells_new_adjusted_np, all_infected_cells = infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_time, all_infected_cells)
 
         print("actual time to run function to postprocess:", time.time()-start_time, "seconds")
         print("this only batch took:", time.time()-start_time_batch, "seconds")
@@ -201,10 +204,10 @@ print("total infected cells:", len(all_infected_cells))
 print("total virions simulated:", num_virus_total)
 
 # %%
-all_infected_cells.to_csv("infected_cells.csv", index=False) 
-(pd.DataFrame(infected_cells_new.cpu())).to_csv("infected_cells_last_wave.csv", index=False) 
-(pd.DataFrame(infected_cells_new_adjusted_np)).to_csv("infected_cells_last_wave_raw.csv", index=False)
-(pd.DataFrame(viral_load_over_time)).to_csv("viral_load_over_time.csv", index=False) 
+# all_infected_cells.to_csv("infected_cells.csv", index=False) 
+# (pd.DataFrame(infected_cells_new.cpu())).to_csv("infected_cells_last_wave.csv", index=False) 
+# (pd.DataFrame(infected_cells_new_adjusted_np)).to_csv("infected_cells_last_wave_raw.csv", index=False)
+# (pd.DataFrame(viral_load_over_time)).to_csv("viral_load_over_time.csv", index=False) 
 
 # %%
 plt.plot(viral_load_over_time)
@@ -227,3 +230,5 @@ plt.xlabel("hours")
 plt.ylabel("total viral load")
 plt.grid(True)
 plt.show()
+
+# %%

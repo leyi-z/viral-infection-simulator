@@ -39,7 +39,7 @@ periodic_boundary = 50000 # microns
 cell_diameter = 4
 
 virion_prod_rate = 8 # 42 per hour i.e. ~1000 per day
-end_time = 48 # 72 hours
+end_time = 30 # 72 hours
 
 latency_time = 6 # hours
 
@@ -87,7 +87,7 @@ plt.show()
 # %%
 num_waves = end_time // latency_time
 print("number of waves:", num_waves)
-memory_cutoff = int(10**8)
+memory_cutoff = int(10**4)
 
 infected_cells_old_adjusted_np = infected_cells_wave0_adjusted_np.copy()
 all_infected_cells = all_infected_cells_after_wave0.copy()
@@ -101,77 +101,63 @@ for wave in range(1,num_waves+1):
     
     start_time_wave = time.time()
     start_time = time.time()
-    num_steps, num_virus, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(end_time, latency_time, 
+    num_steps, num_virus_wave, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(end_time, latency_time, 
                                                                                              vir_prod_interval, infected_cells_old_adjusted_np, device)
     print("actual time to run function to generate num_virus:", time.time()-start_time, "seconds")
     
-    if num_virus==0:
+    if num_virus_wave==0:
         print("no virions produced. simulation stops.", "\n")
         break
     
-    num_virus_total += num_virus
+    num_virus_total += num_virus_wave
 
-    
-    if num_virus > memory_cutoff: 
+    if num_virus_wave > memory_cutoff: 
+
+        batch_config = create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each_cell)
+        
         infected_cells_new_adjusted_np = np.empty((0,3))
-        vir_prod_subtotal = list(itertools.accumulate(vir_prod_each_cell))
         cell_cutoff_old = 0
-
+        num_virus_subtotal = 0
+        
         start_time_all_batch = time.time()
-        for batch in range(num_virus // memory_cutoff):
+        for batch in range(len(batch_config)):
             start_time_batch = time.time()
-            print("batch:", batch+1)
-            cell_cutoff_new = list((x > ((batch+1) * memory_cutoff)) for x in vir_prod_subtotal).index(True)
+            print("batch:", batch)
+            cell_cutoff_new, num_virus = batch_config[batch]
+            
+            print("cell cutoff new:", cell_cutoff_new)
+            print("num_virus:", num_virus)
             
             start_time = time.time()
-            print("cell cutoff:", cell_cutoff_new)
-            infected_cells_new = simulate_virion_paths(memory_cutoff, device, vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new+1], 
-                                                          infected_cells_old_adjusted_np[cell_cutoff_old:cell_cutoff_new+1], num_steps, diffusion_cell,
+            
+            infected_cells_new = simulate_virion_paths(num_virus, device, vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new], 
+                                                          infected_cells_old_adjusted_np[cell_cutoff_old:cell_cutoff_new], num_steps, diffusion_cell,
                                                           ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
                                                           infectable_block_size, infectable_sim_block, infection_prob)
             print("actual time to run function to simulate:", time.time()-start_time, "seconds")
             start_time = time.time()
-            viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier[batch*memory_cutoff:(batch+1)*memory_cutoff], 
+            viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier[num_virus_subtotal:num_virus_subtotal+num_virus], 
                                                               infected_cells_new, viral_load_over_time)
             print("actual time to run function to count viral load:", time.time()-start_time, "seconds")
             start_time = time.time()
             infected_cells_new_adjusted_np_batch, all_infected_cells = infected_cells_location_and_time(infected_cells_new,
-                                                                                            vir_prod_modifier[batch*memory_cutoff:(batch+1)*memory_cutoff], 
+                                                                                            vir_prod_modifier[num_virus_subtotal:num_virus_subtotal+num_virus], 
                                                                                             end_time, all_infected_cells) 
             print("actual time to run function to postprocess:", time.time()-start_time, "seconds")
             start_time = time.time()
             infected_cells_new_adjusted_np = np.concatenate((infected_cells_new_adjusted_np, infected_cells_new_adjusted_np_batch), axis=0)
             cell_cutoff_old = cell_cutoff_new
+            num_virus_subtotal += num_virus
             print("this batch took:", time.time()-start_time_batch, "seconds")
             print("\n")
             
-        batch += 1
-        print("last batch:", batch+1)
-        start_time_batch = time.time()
-        start_time = time.time()
-        infected_cells_new = simulate_virion_paths(int(num_virus % memory_cutoff), device, vir_prod_each_cell[cell_cutoff_old:], 
-                                                      infected_cells_old_adjusted_np, num_steps, diffusion_cell,
-                                                      ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
-                                                      infectable_block_size, infectable_sim_block, infection_prob)
-        print("actual time to run function to simulate:", time.time()-start_time, "seconds")
-        start_time = time.time()
-        viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier[batch*memory_cutoff:], 
-                                                          infected_cells_new, viral_load_over_time)
-        print("actual time to run function to count viral load:", time.time()-start_time, "seconds")
-        start_time = time.time()
-        infected_cells_new_adjusted_np_batch, all_infected_cells = infected_cells_location_and_time(infected_cells_new, vir_prod_modifier[batch*memory_cutoff:], 
-                                                                                        end_time, all_infected_cells) 
-        print("actual time to run function to postprocess:", time.time()-start_time, "seconds")
-        infected_cells_new_adjusted_np = np.concatenate((infected_cells_new_adjusted_np, infected_cells_new_adjusted_np_batch), axis=0)
-        print("this batch took:", time.time()-start_time_batch)
-        print("\n")
         print("infected cells for the wave:", len(infected_cells_new_adjusted_np), "\n")
         print("all batches took:", time.time()-start_time_all_batch, "seconds in total")
             
     else:
         start_time_batch = time.time()
         start_time = time.time()
-        infected_cells_new = simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell,
+        infected_cells_new = simulate_virion_paths(num_virus_wave, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell,
                                                       ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
                                                       infectable_block_size, infectable_sim_block, infection_prob)
         print("actual time to run function to simulate:", time.time()-start_time, "seconds")

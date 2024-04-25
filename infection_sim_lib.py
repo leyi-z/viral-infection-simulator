@@ -40,7 +40,9 @@ def simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_
     # initialize virion path with starting locations
     ################
     vir_prod = np.trim_zeros(vir_prod_each_cell, 'b') # ignore cells that didn't produce any virions
+    print(len(vir_prod))
     vir_initial_coords = infected_cells_old_adjusted_np[:len(vir_prod),:2] + 0.5 # start each virion at center of cells
+    print(len(vir_initial_coords))
     vir_sim = t.zeros(num_virus, 4, device=device) # starting all virions at (0,0,0), 4th column records infection time  
     vir_sim[:,1:3] = t.from_numpy(np.repeat(vir_initial_coords, vir_prod, axis=0)[:num_virus]) # populate with initial locations
     ################
@@ -185,7 +187,7 @@ def generate_secondary_parameters(end_time, latency_time, vir_prod_interval, inf
         # print(infected_cells_wave0_adjusted_np[i, :2])
     print("time to compute when is each virion produced:", time.time()-start_time, "seconds")
 
-    return num_steps, num_virus, vir_prod_each_cell, vir_prod_modifier
+    return int(num_steps), int(num_virus), vir_prod_each_cell, vir_prod_modifier
 
 
 
@@ -259,3 +261,25 @@ def count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cel
     print("time counting viral load:", time.time() - start_time, "seconds")
 
     return viral_load_over_time
+
+
+
+def create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each_cell):
+    cell_cutoff_old = 0
+    num_virus_subtotal = 0
+    batch_config = []
+    vir_prod_subtotal = list(itertools.accumulate(vir_prod_each_cell))
+    
+    while num_virus_subtotal < num_virus_wave:
+        cell_cutoff_new = list((x > (num_virus_subtotal + memory_cutoff)) for x in vir_prod_subtotal).index(True)
+        num_virus = int(sum(vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new]))
+        batch_config.append([cell_cutoff_new, num_virus])
+        cell_cutoff_old = cell_cutoff_new
+        num_virus_subtotal += num_virus
+        if num_virus_wave - num_virus_subtotal < memory_cutoff:
+            num_virus = int(sum(vir_prod_each_cell[cell_cutoff_old:]))
+            batch_config.append([len(vir_prod_each_cell), num_virus])
+            num_virus_subtotal += num_virus
+            break
+    print(batch_config)
+    return batch_config

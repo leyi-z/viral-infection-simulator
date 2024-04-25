@@ -26,6 +26,7 @@ from infection_sim_lib import *
 
 # %%
 device = t.device("cuda")
+memory_cutoff = int(10**4)
 
 diffusion_coeff = 1.27 # microns per second
 
@@ -58,44 +59,36 @@ diffusion_cell = diffusion_coeff / cell_diameter
 # this gives a close enough exact number of virions produced
 vir_prod_interval = (60 * 60 // virion_prod_rate) + 1 # seconds per virion
 # start with 1 infected cell at (0,0)
-infected_cells_start_np = np.array([[0,0,0]])
+infected_cells_old_adjusted_np = np.array([[0,0,0]])
 all_infected_cells = pd.DataFrame({0: [0], 1: [0], 2:[0]}) # start with 1 infected cell at (0,0)
 
+# for plotting viral load
 viral_load_over_time = np.zeros(end_time * 60 * 60//record_increment)
+x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
 
 # %%
 # generate secondary parameters
 num_steps, num_virus, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(end_time, latency_time, 
-                                                                                         vir_prod_interval, infected_cells_start_np, device)
+                                                                                         vir_prod_interval, infected_cells_old_adjusted_np, device)
 print(num_virus, num_steps, vir_prod_each_cell)
 
 # simulate wave 0
-infected_cells_wave0 = simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_start_np, num_steps, diffusion_cell,
+infected_cells_new = simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell,
                                           ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
                                           infectable_block_size, infectable_sim_block, infection_prob)
 
-viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cells_wave0, viral_load_over_time)
+viral_load_over_time = count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cells_new, viral_load_over_time)
 
-infected_cells_wave0_adjusted_np, all_infected_cells_after_wave0 = infected_cells_location_and_time(infected_cells_wave0, vir_prod_modifier, end_time, all_infected_cells)
-
-plt.plot(viral_load_over_time)
-x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
-plt.xticks(x_ticks, x_ticks/(3600/record_increment))
-plt.grid(True)
-plt.show()
+infected_cells_new_adjusted_np, all_infected_cells = infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_time, all_infected_cells)
 
 # %%
 num_waves = end_time // latency_time
 print("number of waves:", num_waves)
-memory_cutoff = int(10**4)
-
-infected_cells_old_adjusted_np = infected_cells_wave0_adjusted_np.copy()
-all_infected_cells = all_infected_cells_after_wave0.copy()
 
 start_time_total = time.time()
-num_virus_total = 0
+num_virus_total = 0 # sanity check: initialize total number of virions simulated
 
-for wave in range(1,num_waves+1):
+for wave in range(1, num_waves+1):
 # for wave in range(1,3):
     print("wave number:", wave)
     
@@ -108,8 +101,8 @@ for wave in range(1,num_waves+1):
     if num_virus_wave==0:
         print("no virions produced. simulation stops.", "\n")
         break
-    
-    num_virus_total += num_virus_wave
+
+    num_virus_total += num_virus_wave # sanity check: total number of virions simulated
 
     if num_virus_wave > memory_cutoff: 
 
@@ -169,7 +162,6 @@ for wave in range(1,num_waves+1):
 
         print("actual time to run function to postprocess:", time.time()-start_time, "seconds")
         print("this only batch took:", time.time()-start_time_batch, "seconds")
-        #print("\n")
 
     if len(infected_cells_new_adjusted_np)==0:
         print("no new cells infected. simulation stops.", "\n")
@@ -178,12 +170,6 @@ for wave in range(1,num_waves+1):
     infected_cells_old_adjusted_np = infected_cells_new_adjusted_np.copy()
     print("this wave took:", time.time()-start_time_wave, "seconds in total")
     print("\n")
-
-    plt.plot(viral_load_over_time)
-    x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
-    plt.xticks(x_ticks, x_ticks/(3600/record_increment))
-    plt.grid(True)
-    plt.show()
 
 print("total time:", time.time() - start_time_total)
 print("total infected cells:", len(all_infected_cells))
@@ -197,7 +183,6 @@ print("total virions simulated:", num_virus_total)
 
 # %%
 plt.plot(viral_load_over_time)
-x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
 plt.xticks(x_ticks, x_ticks/(3600/record_increment))
 plt.title("total viral load over 48 hours post infection")
 plt.xlabel("hours")
@@ -206,8 +191,6 @@ plt.grid(True)
 plt.show()
 
 # %%
-x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
-
 plt.plot(viral_load_over_time)
 plt.yscale("log")
 plt.xticks(x_ticks, x_ticks/(3600/record_increment))

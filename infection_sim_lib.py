@@ -8,6 +8,56 @@ import itertools
 
 
 
+def generate_secondary_parameters(end_time, latency_time, vir_prod_interval, infected_cells_old_adjusted_np, device):
+    
+    start_time = time.time()    
+    num_steps = (end_time - latency_time) * 60 * 60
+    
+    vir_prod_each_cell = [max(0, (num_steps - step) // vir_prod_interval + 1) for step in infected_cells_old_adjusted_np[:,2]]
+    num_virus = int(sum(vir_prod_each_cell))
+    num_steps = num_steps - np.min(infected_cells_old_adjusted_np[:,2])
+    
+    print("number of virions:", num_virus)
+    print("number of steps:", num_steps)
+    print("time to count virions and steps:", time.time()-start_time, "seconds")
+
+    start_time = time.time()    
+    # find out the step at which each virion is produced
+    vir_subtotal = 0
+    vir_prod_modifier = t.zeros(num_virus, device=device)
+    
+    for i,num in enumerate(vir_prod_each_cell):
+        prod_start_time = infected_cells_old_adjusted_np[i, 2] + latency_time * 60 * 60
+        vir_prod_modifier[int(vir_subtotal):int(vir_subtotal+num)] += t.tensor([prod_start_time + x*vir_prod_interval for x in range(int(vir_prod_each_cell[i]))], device=device)
+        vir_subtotal += num
+    print("time to compute when is each virion produced:", time.time()-start_time, "seconds")
+
+    return int(num_steps), int(num_virus), vir_prod_each_cell, vir_prod_modifier
+
+
+
+def create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each_cell):
+    cell_cutoff_old = 0
+    num_virus_subtotal = 0
+    batch_config = []
+    vir_prod_subtotal = list(itertools.accumulate(vir_prod_each_cell))
+    
+    while num_virus_subtotal < num_virus_wave:
+        cell_cutoff_new = list((x > (num_virus_subtotal + memory_cutoff)) for x in vir_prod_subtotal).index(True)
+        num_virus = int(sum(vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new]))
+        batch_config.append([cell_cutoff_new, num_virus])
+        cell_cutoff_old = cell_cutoff_new
+        num_virus_subtotal += num_virus
+        if num_virus_wave - num_virus_subtotal < memory_cutoff:
+            num_virus = int(sum(vir_prod_each_cell[cell_cutoff_old:]))
+            batch_config.append([len(vir_prod_each_cell), num_virus])
+            num_virus_subtotal += num_virus
+            break
+    print(batch_config)
+    return batch_config
+
+
+
 # includes starting location of each virion
 def simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell, 
                              ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
@@ -40,11 +90,11 @@ def simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_
     # initialize virion path with starting locations
     ################
     vir_prod = np.trim_zeros(vir_prod_each_cell, 'b') # ignore cells that didn't produce any virions
-    print(len(vir_prod))
+    print("number of cells that produced nonzero virions", len(vir_prod))
+    print("num virus according to vir_prod", sum(vir_prod))
     vir_initial_coords = infected_cells_old_adjusted_np[:len(vir_prod),:2] + 0.5 # start each virion at center of cells
-    print(len(vir_initial_coords))
     vir_sim = t.zeros(num_virus, 4, device=device) # starting all virions at (0,0,0), 4th column records infection time  
-    vir_sim[:,1:3] = t.from_numpy(np.repeat(vir_initial_coords, vir_prod, axis=0)[:num_virus]) # populate with initial locations
+    vir_sim[:,1:3] = t.from_numpy(np.repeat(vir_initial_coords, vir_prod, axis=0)) # populate with initial locations
     ################
     print("time to initialize virion locations:", time.time()-start_time, "seconds")  
 
@@ -161,36 +211,6 @@ def simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_
 
 
 
-def generate_secondary_parameters(end_time, latency_time, vir_prod_interval, infected_cells_old_adjusted_np, device):
-    
-    start_time = time.time()    
-    num_steps = (end_time - latency_time) * 60 * 60
-    
-    vir_prod_each_cell = [max(0, (num_steps - step) // vir_prod_interval + 1) for step in infected_cells_old_adjusted_np[:,2]]
-    num_virus = int(sum(vir_prod_each_cell))
-    num_steps = num_steps - np.min(infected_cells_old_adjusted_np[:,2])
-    
-    print("number of virions:", num_virus)
-    print("number of steps:", num_steps)
-    print("time to count virions and steps:", time.time()-start_time, "seconds")
-
-    start_time = time.time()    
-    # find out the step at which each virion is produced
-    vir_subtotal = 0
-    vir_prod_modifier = t.zeros(num_virus, device=device)
-    
-    for i,num in enumerate(vir_prod_each_cell):
-        prod_start_time = infected_cells_old_adjusted_np[i, 2] + latency_time * 60 * 60
-        vir_prod_modifier[int(vir_subtotal):int(vir_subtotal+num)] += t.tensor([prod_start_time + x*vir_prod_interval for x in range(int(vir_prod_each_cell[i]))], device=device)
-        vir_subtotal += num
-        # print(i, num)
-        # print(infected_cells_wave0_adjusted_np[i, :2])
-    print("time to compute when is each virion produced:", time.time()-start_time, "seconds")
-
-    return int(num_steps), int(num_virus), vir_prod_each_cell, vir_prod_modifier
-
-
-
 def infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_time, all_infected_cells):
 
     start_time = time.time()
@@ -230,11 +250,11 @@ def infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_
         infected_cells_new_adjusted_np = infected_cells_new_adjusted_df.to_numpy(dtype=int)
         # sort by infection time
         infected_cells_new_adjusted_np = infected_cells_new_adjusted_np[infected_cells_new_adjusted_np[:,2].argsort()]
-        print("max inf time in np:", infected_cells_new_adjusted_np[:,2].max() / 3600)
+        print("max inf time in np:", infected_cells_new_adjusted_np[:,2].max() / 3600, "hours")
         
         # add new infected cells to all infected cells table
         all_infected_cells = pd.concat([all_infected_cells, infected_cells_new_adjusted_df])
-        print("max inf time in all:", all_infected_cells[2].max() / 3600)
+        print("max inf time in all:", all_infected_cells[2].max() / 3600, "hours")
         print("total infected cells:", len(all_infected_cells))
 
     else: 
@@ -264,22 +284,4 @@ def count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cel
 
 
 
-def create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each_cell):
-    cell_cutoff_old = 0
-    num_virus_subtotal = 0
-    batch_config = []
-    vir_prod_subtotal = list(itertools.accumulate(vir_prod_each_cell))
-    
-    while num_virus_subtotal < num_virus_wave:
-        cell_cutoff_new = list((x > (num_virus_subtotal + memory_cutoff)) for x in vir_prod_subtotal).index(True)
-        num_virus = int(sum(vir_prod_each_cell[cell_cutoff_old:cell_cutoff_new]))
-        batch_config.append([cell_cutoff_new, num_virus])
-        cell_cutoff_old = cell_cutoff_new
-        num_virus_subtotal += num_virus
-        if num_virus_wave - num_virus_subtotal < memory_cutoff:
-            num_virus = int(sum(vir_prod_each_cell[cell_cutoff_old:]))
-            batch_config.append([len(vir_prod_each_cell), num_virus])
-            num_virus_subtotal += num_virus
-            break
-    print(batch_config)
-    return batch_config
+

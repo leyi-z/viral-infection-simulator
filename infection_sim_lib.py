@@ -1,5 +1,6 @@
+# contains all functions needed for simulations
+
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import torch as t
 import time
@@ -24,6 +25,7 @@ def generate_secondary_parameters(end_time, latency_time, vir_prod_interval, inf
     start_time = time.time()    
     # find out the step at which each virion is produced
     vir_subtotal = 0
+    print(device)
     vir_prod_modifier = t.zeros(num_virus, device=device)
     
     for i,num in enumerate(vir_prod_each_cell):
@@ -53,7 +55,7 @@ def create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each
             batch_config.append([len(vir_prod_each_cell), num_virus])
             num_virus_subtotal += num_virus
             break
-    print(batch_config)
+    print("batch configuration:", batch_config)
     return batch_config
 
 

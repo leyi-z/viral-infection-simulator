@@ -14,6 +14,9 @@
 # ---
 
 # %%
+# uses functions in infection_sim_lib.py to run simulations
+
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd

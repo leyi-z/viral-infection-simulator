@@ -27,12 +27,9 @@ import numpy as np
 # g.set_facecolor('xkcd:salmon')
 
 # %%
-df = pd.read_csv("../sim_results/infected_cells_240417.csv")
+df = pd.read_csv("results/infected_cells.csv")
 df = df.sort_values('2')#[:10]
 df
-
-# %%
-(df["2"] < 3600).sum()
 
 # %%
 y = df["0"]

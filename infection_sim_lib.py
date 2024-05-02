@@ -286,4 +286,19 @@ def count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cel
 
 
 
+# TODO: should this function be moved to a separate file?
+def count_cell_inf_over_time(record_increment, end_time, all_infected_cells):
 
+    start_time = time.time()
+    
+    num_steps = end_time * 60 * 60
+    cell_inf_over_time =  np.zeros(num_steps//record_increment)
+    
+    for time_step in range(len(cell_inf_over_time)):
+            step_in_sec = time_step * record_increment
+            cell_inf_over_time[time_step] += (all_infected_cells[2] < step_in_sec).sum()
+
+    print("time counting infected cells:", time.time() - start_time, "seconds")
+
+    return cell_inf_over_time
+    

@@ -165,10 +165,13 @@ class InfectionSim:
 
         return viral_load_over_time, all_infected_cells
 
+    
 
+    def cell_count(self, all_infected_cells):
 
+        cell_inf_over_time = count_cell_inf_over_time(self.record_increment, self.end_time, all_infected_cells)
 
-
+        return cell_inf_over_time
 
 
 

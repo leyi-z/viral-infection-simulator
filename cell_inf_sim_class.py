@@ -14,17 +14,23 @@
 # ---
 
 # %%
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from infection_sim_class import InfectionSim
+#from infection_sim_lib import count_cell_count_over_time
 
 # %%
-sim = InfectionSim(end_time=30, virion_prod_rate=8)
-
-# %%
+sim = InfectionSim(
+    end_time=18, 
+    virion_prod_rate=5
+)
 viral_load_over_time, all_infected_cells = sim.run()
+
+# %%
+sim.cell_count(all_infected_cells)
 
 # %%
 ##########
@@ -32,29 +38,5 @@ viral_load_over_time, all_infected_cells = sim.run()
 ##########
 all_infected_cells.to_csv("results/infected_cells.csv", index=False) 
 (pd.DataFrame(viral_load_over_time)).to_csv("results/viral_load_over_time.csv", index=False) 
-
-# %%
-##########
-# just for testing, will merge into class later
-##########
-record_increment = 60*10
-x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/record_increment)
-
-plt.plot(viral_load_over_time)
-plt.xticks(x_ticks, x_ticks/(3600/record_increment))
-plt.title("total viral load over 48 hours post infection")
-plt.xlabel("hours")
-plt.ylabel("total viral load")
-plt.grid(True)
-plt.show()
-
-plt.plot(viral_load_over_time)
-plt.yscale("log")
-plt.xticks(x_ticks, x_ticks/(3600/record_increment))
-plt.title("total viral load (log10) over 48 hours post infection")
-plt.xlabel("hours")
-plt.ylabel("total viral load")
-plt.grid(True)
-plt.show()
 
 # %%

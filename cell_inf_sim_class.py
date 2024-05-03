@@ -19,24 +19,31 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from infection_sim_class import InfectionSim
+#from infection_sim_class import InfectionSim
 #from infection_sim_lib import count_cell_count_over_time
 
 # %%
+# to run one single realization
 sim = InfectionSim(
     end_time=18, 
     virion_prod_rate=5
 )
 viral_load_over_time, all_infected_cells = sim.run()
+cell_inf_over_time = sim.cell_count(all_infected_cells)
 
 # %%
-sim.cell_count(all_infected_cells)
+# to read parameters from table
+parameter_table = pd.read_csv("parameter_combinations.csv")
+for parameter_id, parameter_combo in parameter_table.iterrows():
+    print(parameter_id)
+    print(parameter_combo)
+    sim = InfectionSim(**parameter_combo)
+    viral_load_over_time, all_infected_cells = sim.run()
+    cell_inf_over_time = sim.cell_count(all_infected_cells)
 
 # %%
-##########
-# just for testing, will merge into class later
-##########
-all_infected_cells.to_csv("results/infected_cells.csv", index=False) 
-(pd.DataFrame(viral_load_over_time)).to_csv("results/viral_load_over_time.csv", index=False) 
+all_infected_cells.to_csv("results/infected_cells.csv", index=False)
+(pd.DataFrame(viral_load_over_time)).to_csv("results/viral_load_over_time.csv", index=False)
+(pd.DataFrame(cell_inf_over_time)).to_csv("results/cell_inf_over_time.csv", index=False)
 
 # %%

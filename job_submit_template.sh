@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -p gpu
+#SBATCH -p volta-gpu
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --mem=1G
@@ -11,5 +11,7 @@
 
 PARAMETER_ID=$1
 REALIZATION=$2
+
+module add python/3.9.6
 
 python3 run_sim_slurm.py --parameter_id=$PARAMETER_ID --realization=$REALIZATION

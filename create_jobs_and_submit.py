@@ -22,6 +22,6 @@ num_parameter_id = len(parameter_table.index)
 
 for parameter_id in range(num_parameter_id):
     for realization in range(num_realization):
-        job_name = "para-{0}-rlzt-{1}".format(parameter_id, realization)
+        job_name = "p{0}-r{1}".format(parameter_id, realization)
         
         subprocess.run(['sbatch', '-J', job_name, './job_submit_template.sh', str(parameter_id), str(realization)])

@@ -20,7 +20,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 #from infection_sim_class import InfectionSim
-#from infection_sim_lib import count_cell_count_over_time
 
 # %%
 # to run one single realization

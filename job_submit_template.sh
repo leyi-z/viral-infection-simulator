@@ -1,8 +1,15 @@
 #!/bin/bash
 
-# slurm stuff goes here
+#SBATCH -p gpu
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --mem=1G
+#SBATCH -t 00:04:00
+#SBATCH --qos gpu_access
+#SBATCH --gres=gpu:1
+#SBATCH --output=results/output/slurm-%x-%j.out
 
 PARAMETER_ID=$1
 REALIZATION=$2
 
-python3 rum_sim_slurm.py --parameter_id=$PARAMETER_ID --realization=$REALIZATION
+python3 run_sim_slurm.py --parameter_id=$PARAMETER_ID --realization=$REALIZATION

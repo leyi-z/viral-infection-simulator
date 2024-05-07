@@ -4,12 +4,9 @@ import subprocess
 import pandas as pd
 
 ##################
-# define the last few parameters
-##################
 # the total number of realizations for each parameter combo
+##################
 num_realization = 1
-# define random seed for reproducibility
-seed = int.from_bytes(os.urandom(3), "big")
 ##################
 
 # folder where where all results are stored
@@ -32,6 +29,9 @@ num_parameter_id = len(parameter_table.index)
 
 for parameter_id in range(num_parameter_id):
     for realization in range(num_realization):
+        # define random seed for reproducibility
+        seed = int.from_bytes(os.urandom(3), "big")
+
         job_name = "p{0}-r{1}".format(parameter_id, realization)
         job_submit = ['sbatch', '-J', job_name, './job_submit_template.sh', str(parameter_id), str(realization), str(seed)]
         

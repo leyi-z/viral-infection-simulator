@@ -11,7 +11,8 @@
 
 PARAMETER_ID=$1
 REALIZATION=$2
+SEED=$3
 
 module add python/3.9.6
 
-python3 run_sim_slurm.py --parameter_id=$PARAMETER_ID --realization=$REALIZATION
+python3 run_sim_slurm.py --parameter_id=$PARAMETER_ID --realization=$REALIZATION --seed=$SEED

@@ -1,14 +1,12 @@
 # organize parameters and the code for running simulations into a class
 
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import torch as t
 import time
-import random as rd
-import itertools
 
 from infection_sim_lib import *
+
 
 
 class InfectionSim:
@@ -17,6 +15,7 @@ class InfectionSim:
         self,
         device = t.device("cuda"),
         memory_cutoff = int(10**8), # max # of virions simulated simultaneously
+        seed = 2024, # default seed for simulation
         reflective_boundary = 17, # microns in nasal passage
         exit_boundary = 130000, # microns
         advection_boundary = 7, # microns in nasal passage
@@ -51,6 +50,9 @@ class InfectionSim:
         self.end_time = end_time
         self.latency_time = latency_time
 
+        # set seed for reproducibility
+        t.manual_seed(seed)
+
         # create block pattern for cell infectability to draw from
         self.infectable_block_size = infectable_block_size
         self.infectable_sim_block = t.rand(infectable_block_size * infectable_block_size, device=device) < infectable_fraction
@@ -71,7 +73,7 @@ class InfectionSim:
 
         # for plotting viral load
         viral_load_over_time = np.zeros(self.end_time * 60 * 60//self.record_increment)
-        x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/self.record_increment)
+        # x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/self.record_increment)
 
         # start simulation
         start_time_total = time.time()

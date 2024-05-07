@@ -14,14 +14,15 @@ parameter_table = pd.read_csv("parameter_combinations.csv")
 @click.command()
 @click.option('--parameter_id', prompt='parameter id', help='which parameter combination to use')
 @click.option('--realization', prompt='realization', help='which realization of the given parameter combination')
-def run_sim(parameter_id, realization):
+@click.option('--seed', prompt='seed', help='for reproducing simulation results')
+def run_sim(parameter_id, realization, seed):
     """run one realization of the simulation given the parameter combination"""
 
     parameters = parameter_table.loc[int(parameter_id)].to_dict()
     output_suffix = "_para_id_{0}_rlzt_{1}".format(parameter_id, realization)
 
     # to run one single realization
-    sim = InfectionSim(**parameters)
+    sim = InfectionSim(**parameters, seed=seed)
     viral_load_over_time, all_infected_cells = sim.run()
     cell_inf_over_time = sim.cell_count(all_infected_cells)
 

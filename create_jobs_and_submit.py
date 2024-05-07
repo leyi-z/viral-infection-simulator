@@ -23,6 +23,11 @@ fieldnames = ['parameter_id', 'realization', 'job_id', 'seed']
 with open(submit_record_file, 'w') as csvfile:
     csv.DictWriter(csvfile, fieldnames=fieldnames).writeheader()
 
+# record git commit hash for better reproducibility
+git_hash = subprocess.run(['git', 'log', '-1', '--format="%H"'], capture_output=True, text=True)
+with open("git_commit_hash.txt", "w") as txtfile:
+    txtfile.write(git_hash.stdout)
+
 # find total number of parameter combinations
 parameter_table = pd.read_csv("parameter_combinations.csv")
 num_parameter_id = len(parameter_table.index)
@@ -38,6 +43,7 @@ for parameter_id in range(num_parameter_id):
         job_submit_output = subprocess.run(job_submit, capture_output=True, text=True)
 
         # get the job id
+        # TODO: maybe there's a better way to do this?
         job_id = job_submit_output.stdout.split()[-1]
         # record info about this job
         with open(submit_record_file, 'a') as csvfile:

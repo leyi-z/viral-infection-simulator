@@ -16,7 +16,7 @@ class InfectionSim:
         device = t.device("cuda"),
         memory_cutoff = int(10**8), # max # of virions simulated simultaneously
         seed = 2024, # default seed for simulation
-        reflective_boundary = 17, # microns in nasal passage
+        reflective_boundary = 7+17, # microns in nasal passage
         exit_boundary = 130000, # microns
         advection_boundary = 7, # microns in nasal passage
         advection_velocity = 146.67,  # 146.67 microns per second in nasal passage

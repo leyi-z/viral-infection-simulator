@@ -64,7 +64,7 @@ class InfectionSim:
     
     def run(self):
         # number of waves
-        num_waves = self.end_time // self.latency_time
+        num_waves = int(self.end_time // self.latency_time)
         print("number of waves:", num_waves, "\n")
         
         # start with 1 infected cell at (0,0)

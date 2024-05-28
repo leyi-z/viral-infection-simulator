@@ -4,6 +4,7 @@
 # Simulation results and parameters
 results*
 *.csv
+git_commit_hash.txt
 
 # vscode
 .vscode/

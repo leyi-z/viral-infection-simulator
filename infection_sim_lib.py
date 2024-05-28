@@ -223,10 +223,10 @@ def infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_
     infected_cells_new = infected_cells_new[infected_cells_new[:,2] > 0]    
     # add vir_prod_modifier to infected_cells_new
     infected_cells_new[:,2] = infected_cells_new[:,2] + infected_cells_new[:,3]
-    print("max inf time:", infected_cells_new[:,2].max() / 3600)
+    # print("max inf time:", infected_cells_new[:,2].max() / 3600)
     # remove cells that were infected past the simulated time
     infected_cells_new = infected_cells_new[infected_cells_new[:,2] <= end_time*60*60]    
-    print("max inf time within simulation time:", infected_cells_new[:,2].max() / 3600)
+    # print("max inf time within simulation time:", infected_cells_new[:,2].max() / 3600)
     # convert infected_cells_new to cell locations
     infected_cells_new[:,:2] = t.floor(infected_cells_new[:,:2])
 

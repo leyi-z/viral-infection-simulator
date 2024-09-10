@@ -1,14 +1,36 @@
-# contains all functions needed for simulations
+"""contains all functions needed for simulations"""
 
 import numpy as np
 import pandas as pd
 import torch as t
 import time
 import itertools
+from typing import Tuple,List
 
 
 
-def generate_secondary_parameters(end_time, latency_time, vir_prod_interval, infected_cells_old_adjusted_np, device):
+def generate_secondary_parameters(
+    end_time:int, 
+    latency_time:int, 
+    vir_prod_interval:float, 
+    infected_cells_old_adjusted_np:np.ndarray, 
+    device:t.device,
+) -> Tuple[int,int,List[float],t.Tensor]:
+    """Computes some values and arrays needed for the upcoming wave of simulations
+
+    Args:
+        end_time: total number of hours being simulated
+        latency_time: number of hours a cell stays dormant post-infection before releasing virions
+        vir_prod_interval: number of seconds between two virions being released by a cell
+        infected_cells_old_adjusted_np: position of cells infected in the previous wave
+        device: the device to be used by pytorch
+
+    Returns:
+         num_steps: total number of seconds simulated in this wave
+         num_virus: total number virions produced in this wave
+         vir_prod_each_cell: total number of virions produced by each cell infected in the previous wave
+         vir_prod_modifier: time each virion is produced, used to offset infection times
+    """
     
     start_time = time.time()    
     num_steps = (end_time - latency_time) * 60 * 60
@@ -37,7 +59,22 @@ def generate_secondary_parameters(end_time, latency_time, vir_prod_interval, inf
 
 
 
-def create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each_cell):
+def create_batches_by_memory_cutoff(
+    num_virus_wave:int, 
+    memory_cutoff:int, 
+    vir_prod_each_cell:List[float],
+) -> List[list]:
+    """Divide a wave of simulation into multiple smaller batches handleable by machine
+
+    Args:
+        num_virus_wave: total number of virions to be simulated in this wave
+        memory_cutoff: divide this wave of virions into batches smaller than this selected limit
+        vir_prod_each_cell: number of virions produced by each cell infected in the previous wave
+
+    Returns:
+        batch_config: the configuration (number of cells and number of virions) of each batch to be simulated in this wave
+    """
+
     cell_cutoff_old = 0
     num_virus_subtotal = 0
     batch_config = []
@@ -60,9 +97,43 @@ def create_batches_by_memory_cutoff(num_virus_wave, memory_cutoff, vir_prod_each
 
 
 # includes starting location of each virion
-def simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_old_adjusted_np, num_steps, diffusion_cell, 
-                             ref_bound_cell, adv_bound_cell, adv_vel_cell, exit_bound_cell, prd_bound_cell,
-                             infectable_block_size, infectable_sim_block, infection_prob):
+def simulate_virion_paths(
+    num_virus:int, 
+    device:t.device, 
+    vir_prod_each_cell:List[float], 
+    infected_cells_old_adjusted_np:np.ndarray, 
+    num_steps:int, 
+    diffusion_cell:float, 
+    ref_bound_cell:float, 
+    adv_bound_cell:float, 
+    adv_vel_cell:float, 
+    exit_bound_cell:float, 
+    prd_bound_cell:float,
+    infectable_block_size:float, 
+    infectable_sim_block:t.Tensor, 
+    infection_prob:float,
+) -> t.Tensor:
+    """Simulate trajectory of each virion produced by cells infected in the previous wave
+    
+    Args:
+        num_virus: total number of virions to be simulated 
+        device: the device to be used by pytorch
+        vir_prod_each_cell: number of virions produced by each cell infected in the previous wave
+        infected_cells_old_adjusted_np: position of cells infected in the previous wave
+        num_steps: number of seconds to be simulated
+        diffusion_cell: diffusion coefficient in cell diameter unit
+        ref_bound_cell: reflective boundary in cell diameter unit
+        adv_bound_cell: advection boundary in cell diameter unit, advection starts at this height 
+        adv_vel_cell: advection velocity in cell diameter unit
+        exit_bound_cell: exit boundary in cell diameter unit 
+        prd_bound_cell: periodic boundary in cell diameter unit
+        infectable_block_size: side length of the randomized cell infectability block
+        infectable_sim_block: a randomized block simulating which cells are infectable and which are not 
+        infection_prob: probablity to infect during virion-cell encounter each second
+    
+    Returns:
+        vir_sim[:,1:]: final locations of all simulated virions, and their exit or infection times
+    """
 
     print("starting simulation.")
 
@@ -212,7 +283,24 @@ def simulate_virion_paths(num_virus, device, vir_prod_each_cell, infected_cells_
 
 
 
-def infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_time, all_infected_cells):
+def infected_cells_location_and_time(
+    infected_cells_new:t.Tensor, 
+    vir_prod_modifier:t.Tensor, 
+    end_time:int, 
+    all_infected_cells:pd.DataFrame,
+) -> Tuple[np.ndarray,pd.DataFrame]:
+    """Tally new cells infected by virions simulated in the current wave
+    
+    Args:
+        infected_cells_new: final locations of all virions simulated in this wave, and their exit or infection times
+        vir_prod_modifier: time each virion is produced, used to offset infection times
+        end_time: total number of hours simulated
+        all_infected_cells: all cells that have been infected from the start of the entire simulation
+    
+    Returns:
+        infected_cells_new_adjusted_np: cells that are actually infected by virions simulated in this wave
+        all_infected_cells: updated record of all infected cells
+    """
 
     start_time = time.time()
 
@@ -268,7 +356,23 @@ def infected_cells_location_and_time(infected_cells_new, vir_prod_modifier, end_
 
 
 
-def count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cells_new, viral_load_over_time):
+def count_viral_load_over_time(
+    record_increment:int, 
+    vir_prod_modifier:t.Tensor,
+    infected_cells_new:t.Tensor, 
+    viral_load_over_time:np.ndarray,
+) -> np.ndarray:
+    """Count total number of active virions at each time point
+
+    Args:
+        record_increment: record data every this many seconds
+        vir_prod_modifier: time each virion is produced, used to offset infection times
+        infected_cells_new: final locations of all virions simulated in this wave, and their exit or infection times
+        viral_load_over_time: number of active virions at each time point
+
+    Returns:
+        viral_load_over_time: updated record of viral load over time
+    """
 
     start_time = time.time()
 
@@ -285,8 +389,22 @@ def count_viral_load_over_time(record_increment, vir_prod_modifier, infected_cel
 
 
 
-# TODO: should this function be moved to a separate file?
-def count_cell_inf_over_time(record_increment, end_time, all_infected_cells):
+# TODO: consider moving this function to the class file
+def count_cell_inf_over_time(
+    record_increment:int, 
+    end_time:int, 
+    all_infected_cells:pd.DataFrame,
+) -> np.ndarray:
+    """Count total number of infected cells at each time point
+
+    Args:
+        record_increment: record data every this many seconds
+        end_time: total number of hours simulated
+        all_infected_cells: all cells that have been infected from the start of the entire simulation
+
+    Returns:
+        cell_inf_over_time: total number of infected cells at each time point
+    """
 
     start_time = time.time()
     

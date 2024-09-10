@@ -1,4 +1,4 @@
-# organize parameters and the code for running simulations into a class
+"""organize parameters and the code for running simulations into a class"""
 
 import numpy as np
 import pandas as pd
@@ -14,21 +14,21 @@ class InfectionSim:
     def __init__(
         self,
         device = t.device("cuda"),
-        memory_cutoff = int(10**8), # max # of virions simulated simultaneously
+        memory_cutoff = int(10**8), # max number of virions simulated simultaneously
         seed = 2024, # default seed for simulation
         reflective_boundary = 7+17, # microns in nasal passage
-        exit_boundary = 130000, # microns
-        advection_boundary = 7, # microns in nasal passage
+        exit_boundary = 130000, # microns, length of nasal passage
+        advection_boundary = 7, # microns in nasal passage, advection starts at this height
         advection_velocity = 146.67,  # 146.67 microns per second in nasal passage
-        periodic_boundary = 50000, # microns
+        periodic_boundary = 50000, # microns, circumference of nasal passage
         diffusion_coeff = 1.27, # microns per second
-        cell_diameter = 4,
+        cell_diameter = 4, # microns
         infectable_fraction = 0.5, # fraction of infectable cells
         infection_prob = 0.2,
         virion_prod_rate = 42, # 42 per hour i.e. ~1000 per day
-        end_time = 48, # hours
+        end_time = 48, # hours, total number of simulated hours
         latency_time = 6, # hours
-        infectable_block_size = 2**10,
+        infectable_block_size = 2**10, # side length of the randomized cell infectability block
         record_increment = 60*10, # record data every this many seconds
     ):
         # system parameters
@@ -63,29 +63,34 @@ class InfectionSim:
 
     
     def run(self):
-        # number of waves
+        """This is the main function that carries out the simulation
+        """
+
+        # compute number of waves
         num_waves = int(self.end_time // self.latency_time)
         print("number of waves:", num_waves, "\n")
         
-        # start with 1 infected cell at (0,0)
-        infected_cells_old_adjusted_np = np.array([[0,0,0]]) # start with 1 infected cell at (0,0)
-        all_infected_cells = pd.DataFrame({0: [0], 1: [0], 2:[0]}) # start with 1 infected cell at (0,0)
+        # start with 1 infected cell at (y,z)=(0,0) position
+        infected_cells_old_adjusted_np = np.array([[0,0,0]]) # initialize "cells infected in previous wave"
+        all_infected_cells = pd.DataFrame({0: [0], 1: [0], 2:[0]}) # initialize "all infected cells"
 
-        # for plotting viral load
+        # initialize array to record and plot viral load later
         viral_load_over_time = np.zeros(self.end_time * 60 * 60//self.record_increment)
         # x_ticks = np.arange(0, len(viral_load_over_time)+1, 6*3600/self.record_increment)
 
         # start simulation
-        start_time_total = time.time()
-        num_virus_total = 0 # sanity check: initialize total number of virions simulated
+        start_time_total = time.time() # start recording run time
+        num_virus_total = 0 # for sanity check: initialize total number of virions simulated
         
         for wave in range(num_waves):
             print("wave number:", wave)
             
             start_time_wave = time.time()
             start_time = time.time()
-            num_steps, num_virus_wave, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(self.end_time, self.latency_time, self.vir_prod_interval, 
-                                                                                                             infected_cells_old_adjusted_np, self.device)
+            num_steps, num_virus_wave, vir_prod_each_cell, vir_prod_modifier = generate_secondary_parameters(
+                self.end_time, self.latency_time, self.vir_prod_interval, 
+                infected_cells_old_adjusted_np, self.device
+            )
             print("actual time to run function to generate num_virus:", time.time()-start_time, "seconds")
             
             if num_virus_wave==0:
@@ -170,6 +175,8 @@ class InfectionSim:
     
 
     def cell_count(self, all_infected_cells):
+        """Count total number of infected cells at each time point
+        """
 
         cell_inf_over_time = count_cell_inf_over_time(self.record_increment, self.end_time, all_infected_cells)
 
